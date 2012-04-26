@@ -11,9 +11,9 @@ class DDNS(object):
     max_group_len = 63
     group_sep = '.'
     subgroup_sep = '-'
-    subgroup_pattern = re.compile(r'^[\w\d]+$')
+    subgroup_pattern = re.compile(r'^[*\w\d]+$')
     config = None
-    
+
     class NameTooLong(Exception):
         pass
 
@@ -36,27 +36,44 @@ class DDNS(object):
                 raise cls.GroupTooLong
             for subgroup in group.split(cls.subgroup_sep):
                 if not cls.subgroup_pattern.match(subgroup):
+                    print subgroup
+                    exit()
                     raise cls.InvalidCharacters
 
     def __init__(self, config):
         self.config = config
+        config.logger.info('Zone: %s' % config.zone)
+        config.logger.info('Subzone: %s' % config.subzone)
 
     def update(self):
         commands = []
-        for name, value in self.config.names.iteritems():
-            name = self.clean_name(name)
+        params = {
+            'wan_ip': self.config.wan_ip
+        }
+        for name, (value, record_type) in self.config.names.iteritems():
+            config = self.config
+            name_zone = config.zone
+            if config.subzone:
+                name_zone = '%s.%s' % (config.subzone, name_zone)
+            name = '%s%s' % (self.clean_name(name), name_zone)
             self.validate_name(name)
-            value = value % self.config
-            commands += ['update delete %s' % name,
-            'update add %s. %d A' (name, config.ttl)]
-        tmp = tempfile.mkstemp(text=True)
-        tmp.write('\n'.join(commands))
-        tmp.close()
-        logger.debug('Input file: %s')
+            value = value % params
+            commands += ['update delete %s %s' % (name, record_type),
+            'update add %s. %d %s %s' % (name, config.ttl, record_type, value)]
+        self._run(commands)
+
+    def _run(self, commands):
+        commands = ['zone %s' % (self.config.zone)] \
+            + commands + ['send\n']
+        handle, pathname = tempfile.mkstemp(text=True)
+        descriptor = os.fdopen(handle, 'w')
+        descriptor.write('\n'.join(commands))
+        descriptor.close()
+        self.config.logger.info('Input file: %s' % pathname)
         for command in commands:
-            logger.info('Command: %s' % command)
-        subprocess.call(['/usr/bin/env', 'nsupdate', f.name])
-        os.unlink(tmp.name)
+            self.config.logger.info('Command: %s' % command)
+        subprocess.call(['/usr/bin/env', 'nsupdate', '-l', pathname])
+        os.unlink(pathname)
 
 
 def main():
