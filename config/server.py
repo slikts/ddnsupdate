@@ -4,6 +4,7 @@ wan_ip = None
 
 
 def _update_config():
+    import logging
     from os import getenv
 
     global logger, wan_ip
