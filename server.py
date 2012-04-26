@@ -11,7 +11,7 @@ class DDNS(object):
     max_group_len = 63
     group_sep = '.'
     subgroup_sep = '-'
-    subgroup_pattern = re.compile(r'\w\d')
+    subgroup_pattern = re.compile(r'^[\w\d]+$')
     config = None
     
     class NameTooLong(Exception):
